@@ -248,6 +248,8 @@ Desenvolvimento de experiências e infraestrutura para comunidades digitais.
 
 Os projetos públicos deste perfil são demonstrações independentes, sem dados reais, credenciais ou acesso à infraestrutura de produção.
 
+### [Acessar VOE LAB Prototypes →](https://github.com/Sks2501/voe-labs-prototypes)
+
 | Protótipo | Demonstração | Tecnologias |
 |---|---|---|
 | Micromobility App UI | mapa, veículos, QR e fluxo de corrida | React Native, Expo |
