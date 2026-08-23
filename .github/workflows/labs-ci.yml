@@ -32,8 +32,11 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+          rustup component add rustfmt clippy
           rustc --version
           cargo --version
+          rustfmt --version
+          cargo clippy --version
 
       - name: Verificar Rust
         shell: bash
@@ -81,8 +84,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.x"
-          cache: npm
-          cache-dependency-path: labs/typescript/cqrs_event_store/package.json
 
       - name: Verificar TypeScript
         shell: bash
