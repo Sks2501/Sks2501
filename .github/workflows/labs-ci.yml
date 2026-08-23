@@ -1,0 +1,94 @@
+name: Engenharia - CI Multilinguagem
+
+on:
+  push:
+    paths:
+      - "labs/**"
+      - ".github/workflows/labs-ci.yml"
+  pull_request:
+    paths:
+      - "labs/**"
+      - ".github/workflows/labs-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: labs-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Compilar e executar laboratórios
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Preparar Rust estável
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Verificar Rust
+        shell: bash
+        run: |
+          cargo fmt --manifest-path labs/rust/resilient_pipeline/Cargo.toml -- --check
+          cargo clippy --manifest-path labs/rust/resilient_pipeline/Cargo.toml --all-targets -- -D warnings
+          cargo build --release --manifest-path labs/rust/resilient_pipeline/Cargo.toml
+          cargo run --release --manifest-path labs/rust/resilient_pipeline/Cargo.toml
+
+      - name: Verificar C17
+        shell: bash
+        run: |
+          gcc --version
+          gcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Werror \
+            labs/c17/bounded_frame_parser/main.c \
+            -o /tmp/bounded_frame_parser
+          /tmp/bounded_frame_parser
+
+      - name: Verificar C++20
+        shell: bash
+        run: |
+          g++ --version
+          g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic -Werror -pthread \
+            labs/cpp20/spsc_ring_buffer/main.cpp \
+            -o /tmp/spsc_ring_buffer
+          /tmp/spsc_ring_buffer
+
+      - name: Preparar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache-dependency-path: labs/go/resilient_worker_pool/go.mod
+
+      - name: Verificar Go
+        shell: bash
+        working-directory: labs/go/resilient_worker_pool
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test ./...
+          go build ./...
+          go run .
+
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+          cache-dependency-path: labs/typescript/cqrs_event_store/package.json
+
+      - name: Verificar TypeScript
+        shell: bash
+        working-directory: labs/typescript/cqrs_event_store
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run check
+          npm run build
+          npm start
