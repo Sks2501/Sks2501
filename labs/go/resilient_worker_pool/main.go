@@ -212,6 +212,9 @@ func executeWithResilience(
 		}
 
 		if errors.Is(err, errPermanent) {
+			// A dependência respondeu; a rejeição é de domínio/entrada, não de disponibilidade.
+			// Fechar o probe evita deixar o breaker preso em half-open.
+			breaker.Success()
 			return attempts, err
 		}
 
