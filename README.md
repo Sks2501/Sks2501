@@ -1,147 +1,161 @@
 <div align="center">
 
-# Sks2501 Engineering
+# Laboratório de Engenharia de Sistemas
 
-### Embedded Systems · Distributed Systems · Protocol Design · Backend Infrastructure
+### Sistemas Embarcados · Sistemas Distribuídos · Protocolos · Concorrência · Backend
 
-![Systems](https://img.shields.io/badge/systems-engineering-0b1220?style=for-the-badge)
-![Embedded](https://img.shields.io/badge/embedded-C%20%7C%20RTOS-0b1220?style=for-the-badge)
-![Protocols](https://img.shields.io/badge/protocols-versioned-0b1220?style=for-the-badge)
-![Backend](https://img.shields.io/badge/backend-TypeScript%20%7C%20Node.js-0b1220?style=for-the-badge)
+![Rust](https://img.shields.io/badge/Rust-sistemas-111827?style=for-the-badge&logo=rust&logoColor=white)
+![C](https://img.shields.io/badge/C17-embedded-111827?style=for-the-badge&logo=c&logoColor=A8B9CC)
+![C++](https://img.shields.io/badge/C%2B%2B20-concorrência-111827?style=for-the-badge&logo=cplusplus&logoColor=00599C)
+![Go](https://img.shields.io/badge/Go-resiliência-111827?style=for-the-badge&logo=go&logoColor=00ADD8)
+![TypeScript](https://img.shields.io/badge/TypeScript-CQRS-111827?style=for-the-badge&logo=typescript&logoColor=3178C6)
 
 </div>
 
 ---
 
-## Engineering scope
+## Escopo técnico
 
-This profile is intentionally focused on technical work rather than personal information.
+Este perfil é intencionalmente técnico e não expõe empresas, marcas, localização, infraestrutura privada ou informações pessoais desnecessárias.
 
-Primary areas:
+Áreas principais:
 
-- embedded software architecture;
-- deterministic state machines;
-- binary and application protocol design;
-- telemetry pipelines and event schemas;
-- distributed backend services;
-- API contracts and compatibility policies;
-- observability, resilience and fault isolation;
-- secure-by-default public sandboxes;
-- hardware/software integration research;
-- developer tooling and diagnostics.
-
----
-
-## Public engineering work
-
-### VOE LAB Prototypes
-
-A public systems-engineering laboratory containing safe, synthetic implementations of:
-
-- protocol specifications;
-- OpenAPI contracts;
-- telemetry envelopes;
-- deterministic simulators;
-- architecture decision records;
-- threat models;
-- validation schemas;
-- embedded reference codecs;
-- interoperability rules;
-- failure-mode documentation.
-
-> Public repositories contain synthetic data and non-production interfaces only. No credentials, private infrastructure, real device identifiers or operational control paths are published.
+- engenharia de software de sistemas;
+- concorrência e paralelismo;
+- protocolos binários e parsing determinístico;
+- sistemas distribuídos e tolerância a falhas;
+- CQRS, event sourcing e idempotência;
+- controle de backpressure;
+- circuit breaker e retry com jitter;
+- observabilidade e correlação de requisições;
+- estruturas lock-free quando aplicáveis;
+- segurança por padrão e validação estrita;
+- memória limitada e execução determinística;
+- testes de contratos e compatibilidade.
 
 ---
 
-## Engineering principles
+## Projetos públicos de engenharia
+
+Os exemplos deste repositório usam apenas dados sintéticos e abstrações genéricas. Nenhum código público depende de credenciais reais, topologia privada, dispositivos reais ou sistemas operacionais de empresas.
 
 ```text
-explicit contracts
-    > implicit behavior
+labs/
+├── rust/
+│   └── resilient_pipeline/
+├── c17/
+│   └── bounded_frame_parser/
+├── cpp20/
+│   └── spsc_ring_buffer/
+├── go/
+│   └── resilient_worker_pool/
+└── typescript/
+    └── cqrs_event_store/
+```
 
-bounded failure domains
-    > global failure
+### Rust
 
-versioned protocols
-    > undocumented coupling
+Pipeline concorrente com fila limitada, múltiplos workers, cancelamento cooperativo, métricas atômicas e isolamento de falhas.
 
-observable systems
-    > invisible state
+### C17
 
-reproducible builds
-    > environment-dependent behavior
+Parser binário com limites explícitos, framing determinístico, CRC32, rejeição de entrada truncada e nenhuma alocação dinâmica durante o parse.
 
-safe public interfaces
-    > exposed operational internals
+### C++20
+
+Ring buffer SPSC com índices atômicos, ordenação de memória explícita e sem mutex no caminho quente.
+
+### Go
+
+Worker pool resiliente com `context.Context`, circuit breaker, retry exponencial com jitter, limites de concorrência e desligamento limpo.
+
+### TypeScript
+
+Event store em memória com optimistic concurrency, idempotência, agregados, comandos, eventos de domínio e reconstrução de estado.
+
+---
+
+## Princípios de engenharia
+
+```text
+contratos explícitos
+    > comportamento implícito
+
+falhas limitadas
+    > falhas em cascata
+
+versionamento
+    > acoplamento silencioso
+
+observabilidade
+    > estado invisível
+
+build reproduzível
+    > dependência de ambiente
+
+validação estrita
+    > confiança em entrada externa
+
+rollback definido
+    > mudanças irreversíveis
 ```
 
 ---
 
-## System layers
+## Arquitetura de referência
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    APPLICATION LAYER                        │
-│  API contracts · dashboards · operators · client software  │
-├─────────────────────────────────────────────────────────────┤
-│                    DOMAIN / SERVICES                        │
-│  state machines · policies · scheduling · orchestration    │
-├─────────────────────────────────────────────────────────────┤
-│                  EVENT / TELEMETRY BUS                      │
-│  envelopes · schemas · sequencing · idempotency · replay   │
-├─────────────────────────────────────────────────────────────┤
-│                    PROTOCOL LAYER                           │
-│  framing · validation · compatibility · integrity checks   │
-├─────────────────────────────────────────────────────────────┤
-│                    EMBEDDED LAYER                           │
-│  C · deterministic parsers · bounded memory · diagnostics  │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      APLICAÇÃO / API                         │
+│ contratos · comandos · queries · validação · observabilidade│
+├──────────────────────────────────────────────────────────────┤
+│                     DOMÍNIO / SERVIÇOS                       │
+│ agregados · políticas · idempotência · regras de negócio    │
+├──────────────────────────────────────────────────────────────┤
+│                  EVENTOS / MENSAGERIA                        │
+│ envelopes · sequência · retry · deduplicação · replay       │
+├──────────────────────────────────────────────────────────────┤
+│                    RESILIÊNCIA                               │
+│ timeout · backoff · jitter · circuit breaker · bulkhead     │
+├──────────────────────────────────────────────────────────────┤
+│                    SISTEMAS / EMBEDDED                       │
+│ parsing · buffers limitados · atomics · ownership · CRC     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Technical focus
+## Política pública
 
-| Domain | Practices |
-|---|---|
-| Embedded | bounded buffers, explicit ownership, deterministic execution, state machines |
-| Protocols | version negotiation, framing, integrity validation, compatibility matrices |
-| Backend | strict typing, idempotency, timeouts, retries, circuit breaking, rate limiting |
-| Data | JSON Schema, event envelopes, correlation IDs, sequence numbers, auditability |
-| Security | least privilege, fail-closed behavior, secret isolation, threat modeling |
-| Reliability | health models, graceful degradation, fault containment, recovery semantics |
-| Tooling | CI validation, static analysis, contract checks, reproducible local simulations |
+Pode ser publicado:
 
----
+- código genérico e reproduzível;
+- algoritmos e estruturas de dados;
+- protocolos sintéticos;
+- simuladores sem acesso a hardware real;
+- testes determinísticos;
+- documentação de arquitetura;
+- benchmarks reproduzíveis;
+- exemplos sem segredos.
 
-## Public repository policy
+Não deve ser publicado:
 
-Public code is designed to be inspectable without exposing operational systems.
-
-Published material may include:
-
-- reusable protocol concepts;
-- synthetic simulators;
-- parsers and codecs operating on fictional frames;
-- validation schemas;
-- architecture documentation;
-- non-routable sandbox examples;
-- deterministic tests and fixtures.
-
-Not published:
-
-- production secrets;
-- private hostnames;
-- customer information;
-- real fleet identifiers;
-- operational credentials;
-- production control commands;
-- confidential infrastructure topology.
+- empresas ou marcas privadas;
+- credenciais;
+- tokens;
+- chaves privadas;
+- endpoints de produção;
+- dados de clientes;
+- localização operacional;
+- inventário real de dispositivos;
+- topologia privada de rede;
+- comandos de controle de hardware real;
+- informações confidenciais.
 
 ---
 
 <div align="center">
 
-### Systems should be understandable under failure, not only when everything works.
+### Sistemas bem projetados continuam compreensíveis quando algo falha.
 
 </div>
