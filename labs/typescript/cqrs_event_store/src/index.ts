@@ -54,6 +54,43 @@ type AppendReceipt = Readonly<{
   idempotentReplay: boolean;
 }>;
 
+type CreateWorkflow = Readonly<{
+  type: "create";
+  commandId: string;
+  correlationId: string;
+  workflowId: string;
+  name: string;
+}>;
+
+type RenameWorkflow = Readonly<{
+  type: "rename";
+  commandId: string;
+  correlationId: string;
+  workflowId: string;
+  name: string;
+}>;
+
+type ActivateWorkflow = Readonly<{
+  type: "activate";
+  commandId: string;
+  correlationId: string;
+  workflowId: string;
+}>;
+
+type SuspendWorkflow = Readonly<{
+  type: "suspend";
+  commandId: string;
+  correlationId: string;
+  workflowId: string;
+  reason: string;
+}>;
+
+type Command =
+  | CreateWorkflow
+  | RenameWorkflow
+  | ActivateWorkflow
+  | SuspendWorkflow;
+
 class ConcurrencyError extends Error {
   constructor(
     readonly streamId: string,
@@ -69,7 +106,7 @@ class ConcurrencyError extends Error {
 
 class IdempotencyConflictError extends Error {
   constructor(readonly commandId: string) {
-    super(`commandId reutilizado com operação incompatível: ${commandId}`);
+    super(`commandId reutilizado com conteúdo incompatível: ${commandId}`);
     this.name = "IdempotencyConflictError";
   }
 }
@@ -81,22 +118,85 @@ class DomainRuleError extends Error {
   }
 }
 
+function commandFingerprint(command: Command): string {
+  switch (command.type) {
+    case "create":
+      return JSON.stringify([
+        command.type,
+        command.workflowId,
+        command.name.trim(),
+        command.correlationId,
+      ]);
+    case "rename":
+      return JSON.stringify([
+        command.type,
+        command.workflowId,
+        command.name.trim(),
+        command.correlationId,
+      ]);
+    case "activate":
+      return JSON.stringify([
+        command.type,
+        command.workflowId,
+        command.correlationId,
+      ]);
+    case "suspend":
+      return JSON.stringify([
+        command.type,
+        command.workflowId,
+        command.reason.trim(),
+        command.correlationId,
+      ]);
+  }
+}
+
 class InMemoryEventStore {
   private readonly streams = new Map<string, StoredEvent[]>();
   private readonly commandReceipts = new Map<
     string,
-    Readonly<{ streamId: string; fingerprint: string; receipt: AppendReceipt }>
+    Readonly<{
+      streamId: string;
+      fingerprint: string;
+      receipt: AppendReceipt;
+    }>
   >();
 
   load(streamId: string): readonly StoredEvent[] {
     const stream = this.streams.get(streamId) ?? [];
-    return stream.map((entry) => ({ ...entry, event: structuredClone(entry.event) }));
+    return stream.map((entry) => ({
+      ...entry,
+      event: structuredClone(entry.event),
+    }));
+  }
+
+  lookupCommand(
+    commandId: string,
+    streamId: string,
+    fingerprint: string,
+  ): AppendReceipt | null {
+    const previous = this.commandReceipts.get(commandId);
+    if (!previous) {
+      return null;
+    }
+
+    if (
+      previous.streamId !== streamId ||
+      previous.fingerprint !== fingerprint
+    ) {
+      throw new IdempotencyConflictError(commandId);
+    }
+
+    return {
+      ...previous.receipt,
+      idempotentReplay: true,
+    };
   }
 
   append(
     streamId: string,
     expectedVersion: number,
     commandId: string,
+    fingerprint: string,
     events: readonly DomainEvent[],
   ): AppendReceipt {
     if (!streamId.trim()) {
@@ -105,23 +205,16 @@ class InMemoryEventStore {
     if (!commandId.trim()) {
       throw new Error("commandId vazio");
     }
+    if (!fingerprint) {
+      throw new Error("fingerprint vazio");
+    }
     if (events.length === 0) {
       throw new Error("append sem eventos");
     }
 
-    const fingerprint = JSON.stringify(
-      events.map((event) => ({ type: event.type, workflowId: event.workflowId })),
-    );
-    const previousReceipt = this.commandReceipts.get(commandId);
-
-    if (previousReceipt) {
-      if (
-        previousReceipt.streamId !== streamId ||
-        previousReceipt.fingerprint !== fingerprint
-      ) {
-        throw new IdempotencyConflictError(commandId);
-      }
-      return { ...previousReceipt.receipt, idempotentReplay: true };
+    const replay = this.lookupCommand(commandId, streamId, fingerprint);
+    if (replay) {
+      return replay;
     }
 
     const current = this.streams.get(streamId) ?? [];
@@ -175,10 +268,12 @@ class WorkflowAggregate {
 
   static rehydrate(events: readonly StoredEvent[]): WorkflowAggregate {
     const aggregate = new WorkflowAggregate();
+
     for (const stored of events) {
       aggregate.apply(stored.event);
       aggregate.version = stored.version;
     }
+
     return aggregate;
   }
 
@@ -200,10 +295,12 @@ class WorkflowAggregate {
     if (this.id !== null) {
       throw new DomainRuleError("workflow já existe");
     }
+
     const normalizedName = name.trim();
     if (normalizedName.length < 3 || normalizedName.length > 80) {
       throw new DomainRuleError("nome deve ter entre 3 e 80 caracteres");
     }
+
     return [
       {
         type: "workflow.created",
@@ -216,13 +313,16 @@ class WorkflowAggregate {
 
   decideRename(name: string, metadata: EventMetadata): readonly DomainEvent[] {
     this.assertExists();
+
     const normalizedName = name.trim();
     if (normalizedName.length < 3 || normalizedName.length > 80) {
       throw new DomainRuleError("nome deve ter entre 3 e 80 caracteres");
     }
+
     if (normalizedName === this.name) {
       return [];
     }
+
     return [
       {
         type: "workflow.renamed",
@@ -235,9 +335,11 @@ class WorkflowAggregate {
 
   decideActivate(metadata: EventMetadata): readonly DomainEvent[] {
     this.assertExists();
+
     if (this.status === "active") {
       return [];
     }
+
     return [
       {
         type: "workflow.activated",
@@ -252,13 +354,16 @@ class WorkflowAggregate {
     metadata: EventMetadata,
   ): readonly DomainEvent[] {
     this.assertExists();
+
     if (this.status !== "active") {
       throw new DomainRuleError("somente workflow ativo pode ser suspenso");
     }
+
     const normalizedReason = reason.trim();
     if (normalizedReason.length < 3 || normalizedReason.length > 160) {
       throw new DomainRuleError("motivo deve ter entre 3 e 160 caracteres");
     }
+
     return [
       {
         type: "workflow.suspended",
@@ -298,43 +403,6 @@ class WorkflowAggregate {
   }
 }
 
-type CreateWorkflow = Readonly<{
-  type: "create";
-  commandId: string;
-  correlationId: string;
-  workflowId: string;
-  name: string;
-}>;
-
-type RenameWorkflow = Readonly<{
-  type: "rename";
-  commandId: string;
-  correlationId: string;
-  workflowId: string;
-  name: string;
-}>;
-
-type ActivateWorkflow = Readonly<{
-  type: "activate";
-  commandId: string;
-  correlationId: string;
-  workflowId: string;
-}>;
-
-type SuspendWorkflow = Readonly<{
-  type: "suspend";
-  commandId: string;
-  correlationId: string;
-  workflowId: string;
-  reason: string;
-}>;
-
-type Command =
-  | CreateWorkflow
-  | RenameWorkflow
-  | ActivateWorkflow
-  | SuspendWorkflow;
-
 class IdGenerator {
   private sequence = 0;
 
@@ -352,6 +420,17 @@ class CommandHandler {
 
   execute(command: Command): AppendReceipt | null {
     const streamId = `workflow:${command.workflowId}`;
+    const fingerprint = commandFingerprint(command);
+
+    const replay = this.store.lookupCommand(
+      command.commandId,
+      streamId,
+      fingerprint,
+    );
+    if (replay) {
+      return replay;
+    }
+
     const stored = this.store.load(streamId);
     const aggregate = WorkflowAggregate.rehydrate(stored);
     const metadata: EventMetadata = {
@@ -362,6 +441,7 @@ class CommandHandler {
     };
 
     let events: readonly DomainEvent[];
+
     switch (command.type) {
       case "create":
         events = aggregate.decideCreate(command.workflowId, command.name, metadata);
@@ -385,6 +465,7 @@ class CommandHandler {
       streamId,
       aggregate.snapshot().version,
       command.commandId,
+      fingerprint,
       events,
     );
   }
@@ -416,6 +497,21 @@ function main(): void {
 
   printReceipt("create", handler.execute(createCommand));
   printReceipt("create_replay", handler.execute(createCommand));
+
+  try {
+    handler.execute({
+      ...createCommand,
+      name: "Conteúdo incompatível",
+    });
+  } catch (error: unknown) {
+    if (error instanceof IdempotencyConflictError) {
+      console.log("conflito_idempotencia_detectado", {
+        commandId: error.commandId,
+      });
+    } else {
+      throw error;
+    }
+  }
 
   printReceipt(
     "activate",
@@ -449,26 +545,32 @@ function main(): void {
     }),
   );
 
-  const finalSnapshot = handler.query(workflowId);
-  console.log("snapshot_final", finalSnapshot);
+  console.log("snapshot_final", handler.query(workflowId));
 
   const streamId = `workflow:${workflowId}`;
-  const staleVersion = store.load(streamId).length - 1;
+  const currentVersion = store.load(streamId).length;
+  const staleVersion = currentVersion - 1;
 
   try {
-    store.append(streamId, staleVersion, "cmd-conflito", [
-      {
-        type: "workflow.renamed",
-        workflowId,
-        name: "Alteração concorrente",
-        metadata: {
-          eventId: ids.next("evt"),
-          commandId: "cmd-conflito",
-          correlationId: "corr-conflito",
-          occurredAt: new Date().toISOString(),
+    store.append(
+      streamId,
+      staleVersion,
+      "cmd-conflito",
+      "rename|conflito-sintetico",
+      [
+        {
+          type: "workflow.renamed",
+          workflowId,
+          name: "Alteração concorrente",
+          metadata: {
+            eventId: ids.next("evt"),
+            commandId: "cmd-conflito",
+            correlationId: "corr-conflito",
+            occurredAt: new Date().toISOString(),
+          },
         },
-      },
-    ]);
+      ],
+    );
   } catch (error: unknown) {
     if (error instanceof ConcurrencyError) {
       console.log("concorrencia_detectada", {
